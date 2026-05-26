@@ -5,12 +5,12 @@ from datetime import datetime
 # =====================================================================
 # CONFIGURACIÓN
 # =====================================================================
-TELEGRAM_TOKEN = "8898046277:AAEtqezJFWbFsTghbCiuWsAbTOLyWSmODvo"
-TELEGRAM_CHAT_ID = 8609010281
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8898046277:AAEtqezJFWbFsTghbCiuWsAbTOLyWSmODvo")
+TELEGRAM_CHAT_ID = int(os.environ.get("TELEGRAM_CHAT_ID", "8609010281"))
 PRECIO_HISTORICO_FILE = "ultimo_precio.txt"
 
 # ⚠️  PEGA AQUÍ LA URL EXACTA DE TU BÚSQUEDA EN LATAM (copiada del navegador)
-URL_VUELO = "https://www.latamairlines.com/cl/es/ofertas-vuelos?origin=SCL&outbound=2026-06-25T00%3A00%3A00.000Z&destination=BSB&adt=1&chd=0&inf=0&trip=RT&cabin=Economy&redemption=false&sort=RECOMMENDED&inbound=2026-06-29T00%3A00%3A00.000Z"
+URL_VUELO = "https://www.latamairlines.com/cl/es/ofertas-vuelos?origin=SCL&outbound=2026-06-24T00%3A00%3A00.000Z&destination=RIO&adt=1&chd=0&inf=0&trip=RT&cabin=Economy&redemption=false&sort=RECOMMENDED&inbound=2026-06-29T00%3A00%3A00.000Z&exp_id=0f9cb320-004e-4c7b-a6eb-3e658dd4f5a5"
 
 # =====================================================================
 # FUNCIONES
