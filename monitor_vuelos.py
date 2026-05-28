@@ -1,72 +1,97 @@
 import os
 import requests
-from datetime import datetime
+from pathlib import Path
 
-# =====================================================================
-# CONFIGURACIÓN
-# =====================================================================
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8898046277:AAEtqezJFWbFsTghbCiuWsAbTOLyWSmODvo")
-TELEGRAM_CHAT_ID = int(os.environ.get("TELEGRAM_CHAT_ID", "8609010281"))
-PRECIO_HISTORICO_FILE = "ultimo_precio.txt"
+TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_TOKEN",   "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-# ⚠️  PEGA AQUÍ LA URL EXACTA DE TU BÚSQUEDA EN LATAM (copiada del navegador)
-URL_VUELO = "https://www.latamairlines.com/cl/es/ofertas-vuelos?origin=SCL&outbound=2026-06-24T00%3A00%3A00.000Z&destination=RIO&adt=1&chd=0&inf=0&trip=RT&cabin=Economy&redemption=false&sort=RECOMMENDED&inbound=2026-06-29T00%3A00%3A00.000Z&exp_id=0f9cb320-004e-4c7b-a6eb-3e658dd4f5a5"
+AMADEUS_KEY    = os.environ.get("AMADEUS_KEY",    "")
+AMADEUS_SECRET = os.environ.get("AMADEUS_SECRET", "")
 
-# =====================================================================
-# FUNCIONES
-# =====================================================================
+PRECIO_HISTORICO_FILE = Path("ultimo_precio.txt")
+
+ORIGEN  = "SCL"
+DESTINO = "GIG"
+SALIDA  = "2026-06-24"
+REGRESO = "2026-06-29"
+
+
 def enviar_alerta_telegram(mensaje):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("ERROR: Faltan TELEGRAM_TOKEN o TELEGRAM_CHAT_ID en los secrets.")
+        return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
-        requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": mensaje})
+        r = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": mensaje}, timeout=10)
+        r.raise_for_status()
         print("Alerta enviada a Telegram.")
     except Exception as e:
         print(f"Error Telegram: {e}")
 
 
 def obtener_precio_vuelo():
-    from scrapling.fetchers import DynamicFetcher
-
-    if not URL_VUELO:
-        print("ERROR: Falta la URL.")
+    if not AMADEUS_KEY or not AMADEUS_SECRET:
+        print("ERROR: Faltan AMADEUS_KEY y AMADEUS_SECRET.")
+        print("Obtené tus credenciales gratis en: https://developers.amadeus.com")
         return None
-
-    print(f"Cargando página (puede tardar 30-60 seg)...")
 
     try:
-        page = DynamicFetcher().fetch(URL_VUELO, headless=True, network_idle=True, timeout=60000)
-        print(f"HTTP {page.status} — {page.url}")
+        from amadeus import Client
+        amadeus = Client(client_id=AMADEUS_KEY, client_secret=AMADEUS_SECRET)
 
-        if "/error/" in page.url:
-            print("LATAM redirigió a página de error. La URL caducó, genera una nueva desde el navegador.")
+        response = amadeus.shopping.flight_offers_search.get(
+            originLocationCode=ORIGEN,
+            destinationLocationCode=DESTINO,
+            departureDate=SALIDA,
+            returnDate=REGRESO,
+            adults=1,
+            currencyCode="CLP",
+            max=5,
+        )
+
+        ofertas = response.data
+        if not ofertas:
+            print("No se encontraron vuelos.")
             return None
 
-        if page.status >= 400:
-            print(f"Error HTTP {page.status}.")
-            return None
-
-        selectores = [
-            "span[data-testid='flight-card-price']::text",
-            ".display-currency-price::text",
-            ".price-amount::text",
-            "[class*='price']::text",
-            "[class*='Price']::text",
-            "[class*='fare']::text",
+        precios = [
+            float(o["price"]["grandTotal"])
+            for o in ofertas
+            if "price" in o and "grandTotal" in o["price"]
         ]
 
-        for sel in selectores:
-            texto = page.css(sel).get()
-            if texto and any(c.isdigit() for c in texto):
-                print(f"Precio encontrado: '{texto}'")
-                digits = "".join(c for c in texto if c.isdigit())
-                return int(digits) if digits else None
+        if not precios:
+            print("No se pudo extraer el precio.")
+            return None
 
-        print("No se encontró ningún precio.")
-        return None
+        precio_min = min(precios)
+        print(f"Precio más bajo encontrado: ${precio_min:,.0f} CLP")
+        return precio_min
 
     except Exception as e:
-        print(f"Error al cargar: {e}")
+        print(f"Error al consultar Amadeus: {e}")
         return None
+
+
+def generar_urls_vuelo():
+    latam = (
+        f"https://www.latam.com/es_cl/apps/personas/booking"
+        f"?fecha1_id={SALIDA}&fecha2_id={REGRESO}"
+        f"&from_city1={ORIGEN}&to_city1={DESTINO}&auaultos=1&tipo_viaje=RT"
+    )
+    sky = (
+        f"https://www.skyairline.com/vuelos"
+        f"?from={ORIGEN}&to={DESTINO}&departureDate={SALIDA}&returnDate={REGRESO}&adults=1"
+    )
+    despegar = (
+        f"https://www.despegar.cl/vuelos/ida-y-vuelta"
+        f"/{ORIGEN}/{DESTINO}/{SALIDA}/{REGRESO}/1/0/0/"
+    )
+    google = (
+        f"https://www.google.com/travel/flights?hl=es"
+        f"#flt={ORIGEN}.{DESTINO}.{SALIDA}*{DESTINO}.{ORIGEN}.{REGRESO};c:CLP;e:1;sd:1;t:f"
+    )
+    return latam, sky, despegar, google
 
 
 def evaluar_precio(precio_actual):
@@ -74,27 +99,28 @@ def evaluar_precio(precio_actual):
         print("Sin precio. Finalizando.")
         return
 
-    if not os.path.exists(PRECIO_HISTORICO_FILE):
-        with open(PRECIO_HISTORICO_FILE, "w") as f:
-            f.write(str(precio_actual))
-        print(f"Primer registro guardado: ${precio_actual:,} CLP")
+    try:
+        precio_anterior = float(PRECIO_HISTORICO_FILE.read_text().strip())
+    except FileNotFoundError:
+        PRECIO_HISTORICO_FILE.write_text(str(precio_actual))
+        print(f"Primer registro guardado: ${precio_actual:,.0f} CLP")
         return
 
-    with open(PRECIO_HISTORICO_FILE, "r") as f:
-        precio_anterior = int(f.read().strip())
-
-    print(f"Precio anterior: ${precio_anterior:,} CLP")
-    print(f"Precio actual:   ${precio_actual:,} CLP")
-
-    with open(PRECIO_HISTORICO_FILE, "w") as f:
-        f.write(str(precio_actual))
+    print(f"Precio anterior: ${precio_anterior:,.0f} CLP")
+    print(f"Precio actual:   ${precio_actual:,.0f} CLP")
 
     if precio_actual < precio_anterior:
+        latam, sky, despegar, google = generar_urls_vuelo()
         mensaje = (
             f"⚠️ ¡BAJÓ EL VUELO! ✈️\n\n"
-            f"• Antes: ${precio_anterior:,} CLP\n"
-            f"• Ahora: ${precio_actual:,} CLP\n\n"
-            f"Ver aquí:\n{URL_VUELO}"
+            f"• Antes: ${precio_anterior:,.0f} CLP\n"
+            f"• Ahora: ${precio_actual:,.0f} CLP\n"
+            f"• Ruta: {ORIGEN} → RIO ({SALIDA} → {REGRESO})\n\n"
+            f"🔗 Reservá ahora:\n"
+            f"✈️ LATAM: {latam}\n"
+            f"✈️ Sky: {sky}\n"
+            f"🔍 Despegar: {despegar}\n"
+            f"🔍 Google Flights: {google}"
         )
         enviar_alerta_telegram(mensaje)
     elif precio_actual > precio_anterior:
@@ -102,15 +128,12 @@ def evaluar_precio(precio_actual):
     else:
         print("Sin cambios en el precio.")
 
+    PRECIO_HISTORICO_FILE.write_text(str(precio_actual))
 
-# =====================================================================
-# MAIN
-# =====================================================================
+
 if __name__ == "__main__":
-    print("⚡ Probando Telegram...")
-    enviar_alerta_telegram("✈️ Bot activo.")
-
-    print("\n✈️ Rastreando precio...")
+    print("✈️ Rastreando precio...")
     precio = obtener_precio_vuelo()
     evaluar_precio(precio)
     print("Listo.")
+
