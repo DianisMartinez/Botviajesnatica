@@ -15,9 +15,10 @@ REGRESO = "2026-06-29"
 
 def obtener_precio_vuelo():
     try:
-        from fast_flights import FlightData, Passengers, create_filter, get_flights
+        import re
+        from fast_flights import FlightData, Passengers, get_flights
 
-        filtro = create_filter(
+        resultado = get_flights(
             flight_data=[
                 FlightData(date=SALIDA, from_airport=ORIGEN, to_airport=DESTINO),
                 FlightData(date=REGRESO, from_airport=DESTINO, to_airport=ORIGEN),
@@ -27,23 +28,22 @@ def obtener_precio_vuelo():
             passengers=Passengers(adults=1),
         )
 
-        resultado = get_flights(filtro)
-
         if not resultado or not resultado.flights:
             print("No se encontraron vuelos.")
             return None
 
-        precios = [
-            f.price for f in resultado.flights
-            if f.price and f.price > 0
-        ]
+        precios = []
+        for f in resultado.flights:
+            digits = re.sub(r"[^\d.]", "", str(f.price))
+            if digits:
+                precios.append(float(digits))
 
         if not precios:
             print("No se pudo extraer el precio.")
             return None
 
         precio_min = min(precios)
-        print(f"Precio más bajo encontrado: ${precio_min:,.0f}")
+        print(f"Precio más bajo encontrado: {precio_min:,.0f}")
         return precio_min
 
     except Exception as e:
