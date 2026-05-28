@@ -1,13 +1,54 @@
 import os
 import requests
+from pathlib import Path
 
 TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+PRECIO_HISTORICO_FILE = Path("ultimo_precio.txt")
 
 ORIGEN  = "SCL"
 DESTINO = "GIG"
 SALIDA  = "2026-06-24"
 REGRESO = "2026-06-29"
+
+
+def obtener_precio_vuelo():
+    try:
+        from fast_flights import FlightData, Passengers, create_filter, get_flights
+
+        filtro = create_filter(
+            flight_data=[
+                FlightData(date=SALIDA, from_airport=ORIGEN, to_airport=DESTINO),
+                FlightData(date=REGRESO, from_airport=DESTINO, to_airport=ORIGEN),
+            ],
+            trip="round-trip",
+            seat="economy",
+            passengers=Passengers(adults=1),
+        )
+
+        resultado = get_flights(filtro)
+
+        if not resultado or not resultado.flights:
+            print("No se encontraron vuelos.")
+            return None
+
+        precios = [
+            f.price for f in resultado.flights
+            if f.price and f.price > 0
+        ]
+
+        if not precios:
+            print("No se pudo extraer el precio.")
+            return None
+
+        precio_min = min(precios)
+        print(f"Precio más bajo encontrado: ${precio_min:,.0f}")
+        return precio_min
+
+    except Exception as e:
+        print(f"Error al consultar vuelos: {e}")
+        return None
 
 
 def generar_urls():
@@ -37,26 +78,59 @@ def enviar_alerta_telegram(mensaje):
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
-        r = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "HTML"}, timeout=10)
+        r = requests.post(
+            url,
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "HTML"},
+            timeout=10,
+        )
         r.raise_for_status()
-        print("Mensaje enviado a Telegram.")
+        print("Alerta enviada a Telegram.")
     except Exception as e:
         print(f"Error Telegram: {e}")
 
 
+def evaluar_precio(precio_actual):
+    if precio_actual is None:
+        print("Sin precio. Finalizando.")
+        return
+
+    try:
+        precio_anterior = float(PRECIO_HISTORICO_FILE.read_text().strip())
+    except FileNotFoundError:
+        PRECIO_HISTORICO_FILE.write_text(str(precio_actual))
+        print(f"Primer registro guardado: {precio_actual:,.0f}")
+        return
+
+    print(f"Precio anterior: {precio_anterior:,.0f}")
+    print(f"Precio actual:   {precio_actual:,.0f}")
+
+    if precio_actual < precio_anterior:
+        latam, sky, despegar, google = generar_urls()
+        bajada = precio_anterior - precio_actual
+        mensaje = (
+            f"⚠️ <b>¡BAJÓ EL VUELO!</b> ✈️\n\n"
+            f"📍 {ORIGEN} → RIO DE JANEIRO\n"
+            f"📅 {SALIDA} → {REGRESO}\n\n"
+            f"• Antes: ${precio_anterior:,.0f}\n"
+            f"• Ahora: ${precio_actual:,.0f}\n"
+            f"• Bajó: ${bajada:,.0f} 🎉\n\n"
+            f"🔗 <b>Reservá ahora:</b>\n"
+            f"✈️ <a href='{latam}'>LATAM</a>\n"
+            f"✈️ <a href='{sky}'>Sky Airline</a>\n"
+            f"🔍 <a href='{despegar}'>Despegar</a>\n"
+            f"🔍 <a href='{google}'>Google Flights</a>"
+        )
+        enviar_alerta_telegram(mensaje)
+    elif precio_actual > precio_anterior:
+        print("El precio subió. Sin alerta.")
+    else:
+        print("Sin cambios en el precio.")
+
+    PRECIO_HISTORICO_FILE.write_text(str(precio_actual))
+
+
 if __name__ == "__main__":
-    latam, sky, despegar, google = generar_urls()
-
-    mensaje = (
-        f"✈️ <b>Revisá los vuelos de hoy</b>\n\n"
-        f"📍 {ORIGEN} → RIO DE JANEIRO\n"
-        f"📅 {SALIDA} → {REGRESO}\n\n"
-        f"🔗 <b>Comparar precios:</b>\n"
-        f"✈️ <a href='{latam}'>LATAM</a>\n"
-        f"✈️ <a href='{sky}'>Sky Airline</a>\n"
-        f"🔍 <a href='{despegar}'>Despegar</a>\n"
-        f"🔍 <a href='{google}'>Google Flights</a>"
-    )
-
-    enviar_alerta_telegram(mensaje)
+    print("✈️ Rastreando precio...")
+    precio = obtener_precio_vuelo()
+    evaluar_precio(precio)
     print("Listo.")
