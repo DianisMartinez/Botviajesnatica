@@ -1,11 +1,34 @@
+#!/usr/bin/env python3
+import argparse
 import os
 import requests
 from pathlib import Path
 
-TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_TOKEN", "")
+BASE_DIR = Path(__file__).resolve().parent
+ENV_FILE = BASE_DIR / ".env"
+
+
+def load_env_file(env_path: Path):
+    if not env_path.exists():
+        return
+    with env_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
+load_env_file(ENV_FILE)
+
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-PRECIO_HISTORICO_FILE = Path("ultimo_precio.txt")
+PRECIO_HISTORICO_FILE = BASE_DIR / "ultimo_precio.txt"
 
 ORIGEN  = "SCL"
 DESTINO = "GIG"
@@ -55,7 +78,7 @@ def generar_urls():
     latam = (
         f"https://www.latam.com/es_cl/apps/personas/booking"
         f"?fecha1_id={SALIDA}&fecha2_id={REGRESO}"
-        f"&from_city1={ORIGEN}&to_city1={DESTINO}&auaultos=1&tipo_viaje=RT"
+        f"&from_city1={ORIGEN}&to_city1={DESTINO}&adultos=1&tipo_viaje=RT"
     )
     sky = (
         f"https://www.skyairline.com/vuelos"
@@ -129,8 +152,30 @@ def evaluar_precio(precio_actual):
     PRECIO_HISTORICO_FILE.write_text(str(precio_actual))
 
 
+def enviar_alerta_prueba():
+    mensaje = (
+        "✈️ <b>Prueba de alerta de monitor_vuelos</b>\n\n"
+        "Este mensaje confirma que la integración con Telegram está funcionando."
+    )
+    enviar_alerta_telegram(mensaje)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Monitor de precios de vuelos.")
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Enviar una alerta de prueba a Telegram.",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    print("✈️ Rastreando precio...")
-    precio = obtener_precio_vuelo()
-    evaluar_precio(precio)
-    print("Listo.")
+    args = parse_args()
+    if args.test:
+        enviar_alerta_prueba()
+    else:
+        print("✈️ Rastreando precio...")
+        precio = obtener_precio_vuelo()
+        evaluar_precio(precio)
+        print("Listo.")

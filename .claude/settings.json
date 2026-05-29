@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import fast_flights; print\\(dir\\(fast_flights\\)\\)\")",
+      "Bash(pip3 show *)",
+      "Read(//Library/Frameworks/Python.framework/**)",
+      "Bash(git commit -m ' *)",
+      "WebSearch"
+    ]
+  }
+}

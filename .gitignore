@@ -1,0 +1,4 @@
+.env
+ultimo_precio.txt
+__pycache__/
+.DS_Store

@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import scrapling\")",
+      "Bash(python3 -c \"import requests\")",
+      "Bash(pip3 install *)",
+      "Bash(python3 -c \"from scrapling.fetchers import DynamicFetcher; print\\('OK'\\)\")",
+      "Bash(pip3 --version)",
+      "Bash(python3 -m pip install scrapling requests)",
+      "Bash(python3.14 -c \"from scrapling.fetchers import DynamicFetcher; print\\('OK'\\)\")",
+      "Bash(python3.14 -c \"from scrapling.fetchers import DynamicFetcher; print\\('scrapling OK'\\)\")",
+      "Bash(python3.14 -m playwright install chromium)",
+      "Bash(python3.14 monitor_vuelos.py)",
+      "Bash(gh auth *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh secret *)",
+      "Bash(gh workflow *)",
+      "Bash(gh run *)",
+      "Bash(python3.14 -c \"from scrapling.fetchers import StealthyFetcher; print\\('StealthyFetcher OK'\\)\")",
+      "Bash(python3.14 -c \"import camoufox; print\\(camoufox.__version__\\)\")",
+      "Bash(python3.14 -m camoufox fetch)",
+      "Bash(python3.14 -)",
+      "mcp__claude_ai_Gmail__search_threads",
+      "WebFetch(domain:developers.amadeus.com)",
+      "WebFetch(domain:tequila.kiwi.com)"
+    ]
+  }
+}
