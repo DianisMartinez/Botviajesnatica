@@ -30,10 +30,14 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 PRECIO_HISTORICO_FILE = BASE_DIR / "ultimo_precio.txt"
 
+# Parámetros de vuelo
 ORIGEN  = "SCL"
 DESTINO = "GIG"
 SALIDA  = "2026-06-24"
 REGRESO = "2026-06-29"
+
+# Umbral mínimo de bajada para enviar alerta (en pesos)
+UMBRAL_BAJADA = 1000
 
 
 def obtener_precio_vuelo():
@@ -118,25 +122,37 @@ def evaluar_precio(precio_actual):
         return
 
     try:
-        precio_anterior = float(PRECIO_HISTORICO_FILE.read_text().strip())
+        contenido = PRECIO_HISTORICO_FILE.read_text().strip()
+        if not contenido:
+            # Archivo vacío, guardar el precio actual como referencia
+            PRECIO_HISTORICO_FILE.write_text(str(precio_actual))
+            print(f"Archivo vacío. Primer precio guardado: {precio_actual:,.0f}")
+            return
+        precio_anterior = float(contenido)
     except FileNotFoundError:
         PRECIO_HISTORICO_FILE.write_text(str(precio_actual))
         print(f"Primer registro guardado: {precio_actual:,.0f}")
         return
+    except ValueError:
+        # Archivo corrupto, sobrescribir con el precio actual
+        PRECIO_HISTORICO_FILE.write_text(str(precio_actual))
+        print(f"Archivo corrupto. Reiniciado con: {precio_actual:,.0f}")
+        return
 
-    print(f"Precio anterior: {precio_anterior:,.0f}")
-    print(f"Precio actual:   {precio_actual:,.0f}")
+    print(f"Precio anterior: ${precio_anterior:,.0f}")
+    print(f"Precio actual:   ${precio_actual:,.0f}")
 
-    if precio_actual < precio_anterior:
+    diferencia = precio_anterior - precio_actual
+    
+    if diferencia >= UMBRAL_BAJADA:
         latam, sky, despegar, google = generar_urls()
-        bajada = precio_anterior - precio_actual
         mensaje = (
             f"⚠️ <b>¡BAJÓ EL VUELO!</b> ✈️\n\n"
             f"📍 {ORIGEN} → RIO DE JANEIRO\n"
             f"📅 {SALIDA} → {REGRESO}\n\n"
             f"• Antes: ${precio_anterior:,.0f}\n"
             f"• Ahora: ${precio_actual:,.0f}\n"
-            f"• Bajó: ${bajada:,.0f} 🎉\n\n"
+            f"• Bajó: ${diferencia:,.0f} 🎉\n\n"
             f"🔗 <b>Reservá ahora:</b>\n"
             f"✈️ <a href='{latam}'>LATAM</a>\n"
             f"✈️ <a href='{sky}'>Sky Airline</a>\n"
@@ -144,8 +160,10 @@ def evaluar_precio(precio_actual):
             f"🔍 <a href='{google}'>Google Flights</a>"
         )
         enviar_alerta_telegram(mensaje)
-    elif precio_actual > precio_anterior:
-        print("El precio subió. Sin alerta.")
+    elif diferencia > 0:
+        print(f"El precio bajó ${-diferencia:,.0f}, pero está bajo el umbral de ${UMBRAL_BAJADA:,.0f}.")
+    elif diferencia < 0:
+        print(f"El precio subió ${-diferencia:,.0f}. Sin alerta.")
     else:
         print("Sin cambios en el precio.")
 

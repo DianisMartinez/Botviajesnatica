@@ -1,0 +1,49 @@
+name: Flight Price Monitor
+
+on:
+  schedule:
+    # Ejecutar todos los días a las 9 AM UTC (6 AM hora de Santiago)
+    # Formato: minuto hora día_del_mes mes día_de_la_semana
+    - cron: '0 9 * * *'
+  
+  # Permite ejecutar manualmente desde GitHub Actions UI
+  workflow_dispatch:
+
+jobs:
+  monitor-flights:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install fast-flights requests
+      
+      - name: Run flight price monitor
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python monitor_vuelos.py
+      
+      - name: Commit updated price file
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "Flight Monitor Bot"
+          
+          # Verificar si hay cambios en ultimo_precio.txt
+          if git diff --quiet ultimo_precio.txt; then
+            echo "No hay cambios en el precio"
+          else
+            git add ultimo_precio.txt
+            git commit -m "Update flight price: $(cat ultimo_precio.txt)"
+            git push
+          fi
